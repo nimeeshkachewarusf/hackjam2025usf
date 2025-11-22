@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated Registration Scheduler</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .usf-green { background-color: #006738; }
+        .gpa-high { color: #f97316; } /* Orange-ish */
+        .gpa-med { color: #f59e0b; }
+        .gpa-low { color: #4b5563; }
+        .status-available { background-color: #3b82f6; }
+        .status-conflict { background-color: #ef4444; }
+        .status-selected { background-color: #10b981; }
+        .schedule-entry { 
+            border-left-width: 4px;
+            border-style: solid;
+            border-color: #10b981; /* Default green */
+        }
+        .schedule-entry.conflict {
+            border-color: #ef4444;
+        }
+        /* Calendar CSS elements removed as we switched to list view */
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="usf-green text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <h1 class="text-2xl font-bold">Automated Registration Scheduler</h1>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 py-8 grid grid-cols-1 md:grid-cols-3 gap-8">
+        
+        <div class="md:col-span-2 space-y-6">
+
+            <div id="view-menu" class="bg-white p-8 rounded-lg shadow-xl space-y-6">
+                <h2 class="text-3xl font-bold text-gray-900">Intelligent Course Selection for Spring 2026</h2>
+                
+                <div class="bg-white rounded-lg shadow p-6 border-2 border-green-600">
+                    <h3 class="text-xl font-bold text-green-700 mb-4">Start Automated Planning</h3>
+                    <p class="text-gray-600 mb-6">Enter your desired courses in order of priority. The bot will optimize for the highest historical professor GPA while avoiding time conflicts.</p>
+                    
+                    <label class="block text-sm font-semibold text-gray-700 mb-3">
+                        Enter Course IDs (comma-separated)
+                    </label>
+                    <textarea 
+                        id="user-courses-input" 
+                        class="w-full px-4 py-3 border-2 border-gray-300 rounded focus:border-green-600 focus:outline-none"
+                        rows="4"
+                        placeholder="COP 4600, CDA 3103, CEN 4020, PHY 2048"
+                    >COP 4600, CDA 3103, CEN 4020, PHY 2048</textarea>
+                    
+                    <button onclick="startProcessing()" class="w-full mt-6 bg-green-700 text-white px-6 py-3 rounded font-semibold hover:bg-green-800 transition">
+                        Start Automation
+                    </button>
+                </div>
+            </div>
+
+            <div id="view-review" class="hidden bg-white p-8 rounded-lg shadow-xl space-y-6">
+                <h2 class="text-3xl font-bold text-gray-900">Step <span id="current-step">0</span> of <span id="total-steps">0</span>: Reviewing <span id="review-course-id" class="text-blue-600">...</span></h2>
+                <h3 id="review-course-title" class="text-xl font-semibold text-gray-700">...</h3>
+
+                <div id="decision-banner" class="p-4 rounded-lg bg-yellow-100 border-l-4 border-yellow-500">
+                    <p class="font-bold text-yellow-900">Automated Decision:</p>
+                    <p id="decision-text" class="text-yellow-800">Reviewing options...</p>
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-700">All Available Sections vs. Automated Choice</h3>
+                
+                <div id="sections-container" class="space-y-4">
+                    </div>
+
+                <div class="bg-blue-50 p-4 text-center rounded">
+                    <p id="automation-countdown" class="text-blue-800 font-semibold">
+                        Reviewing options for <span id="countdown-course">...</span> | Automation will proceed in 4 seconds...
+                    </p>
+                </div>
+            </div>
+
+            <div id="view-final" class="hidden bg-white p-8 rounded-lg shadow-xl space-y-6">
+                <h2 class="text-3xl font-bold text-gray-900">Final Automated Schedule Plan</h2>
+                <div class="bg-green-100 p-4 rounded-lg border-l-4 border-green-500">
+                    <p class="text-green-800 font-semibold">The automated plan is complete. <span id="final-scheduled-count">0</span> courses were successfully scheduled. Review the results below and the final timetable on the right.</p>
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-700">Course Selection Results</h3>
+                
+                <div id="final-results-container" class="space-y-4">
+                    </div>
+            </div>
+        </div>
+
+        <div class="md:col-span-1 bg-white p-6 rounded-lg shadow-xl sticky top-4 h-fit">
+            <h3 class="text-xl font-bold text-gray-900 mb-4">Current Schedule</h3>
+            
+            <div id="weekly-schedule-list" class="space-y-3 mb-6">
+                </div>
+
+            <h4 class="text-lg font-bold text-gray-900 mb-2">Daily Schedule Overview</h4>
+            
+            <div id="daily-schedule-view" class="h-96 overflow-y-scroll border border-gray-300 rounded p-3 space-y-4 bg-gray-50">
+                
+                <div class="space-y-2" id="day-mon">
+                    <p class="font-bold text-gray-700 border-b pb-1">Monday ☀️</p>
+                    <div id="mon-events">No classes scheduled.</div>
+                </div>
+                
+                <div class="space-y-2" id="day-tue">
+                    <p class="font-bold text-gray-700 border-b pb-1">Tuesday 🌤️</p>
+                    <div id="tue-events">No classes scheduled.</div>
+                </div>
+
+                <div class="space-y-2" id="day-wed">
+                    <p class="font-bold text-gray-700 border-b pb-1">Wednesday ☁️</p>
+                    <div id="wed-events">No classes scheduled.</div>
+                </div>
+
+                <div class="space-y-2" id="day-thu">
+                    <p class="font-bold text-gray-700 border-b pb-1">Thursday ⚡</p>
+                    <div id="thu-events">No classes scheduled.</div>
+                </div>
+
+                <div class="space-y-2" id="day-fri">
+                    <p class="font-bold text-gray-700 border-b pb-1">Friday 🎉</p>
+                    <div id="fri-events">No classes scheduled.</div>
+                </div>
+                
+                <div class="space-y-2" id="day-online">
+                    <p class="font-bold text-gray-700 border-b pb-1">Online/Asynchronous 🌐</p>
+                    <div id="online-events">No online classes scheduled.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function startProcessing() {
+            var input = document.getElementById('user-courses-input').value.trim();
+            if (!input) {
+                alert('Please enter courses.');
+                return;
+            }
+            // Transition to the review view to pause and wait for the bot
+            document.getElementById('view-menu').classList.add('hidden');
+            document.getElementById('view-review').classList.remove('hidden');
+            document.getElementById('review-course-id').textContent = 'COP 4600'; 
+            document.getElementById('review-course-title').textContent = 'Operating Systems'; 
+            document.getElementById('decision-text').textContent = 'Bot initiated. Waiting for process start from console...';
+        }
+    </script>
+</body>
+</html>
